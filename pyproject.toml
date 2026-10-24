@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kuro"
+version = "0.1.0"
+description = "Autonomous Binary Modernization Multi-Agent Swarm"
+readme = "PRD.md"
+authors = [{ name = "Ilyan Khan" }]
+requires-python = ">=3.11"
+dependencies = [
+    "google-genai>=1.0.0",
+    "langgraph>=0.2.0",
+    "langchain-core>=0.3.0",
+    "pydantic>=2.7.0",
+    "docker>=7.0.0",
+    "r2pipe>=1.8.0",
+    "rich>=13.7.0",
+    "typer>=0.12.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.scripts]
+kuro = "kuro.cli:app"
+
+[tool.setuptools.packages.find]
+where = ["src"]
