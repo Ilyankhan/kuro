@@ -29,3 +29,17 @@ def test_probe_on_go_calc():
     assert "reverse" in probe_report.detected_subcommands or "stats" in probe_report.detected_subcommands
     assert probe_report.help_text is not None
     assert "aegis_sample" in probe_report.help_text
+
+
+def test_probe_defaults_stdin_to_empty_string():
+    runner = DockerSandboxRunner(image="kuro-sandbox")
+    inspector = BinaryInspector("/home/ilyan/random/kuro/benchmarks/c_cipher/cipher")
+    inspection_report = inspector.inspect()
+
+    probe = DynamicRuntimeProbe(runner)
+    probe_report = probe.probe("/home/ilyan/random/kuro/benchmarks/c_cipher/cipher", inspection_report)
+
+    assert len(probe_report.sample_runs) > 0
+    for run in probe_report.sample_runs:
+        assert run.stdin_input == ""
+        assert not run.timed_out

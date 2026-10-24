@@ -1,5 +1,5 @@
 import re
-from typing import List, Set, Tuple
+from typing import List, Optional, Set, Tuple
 from kuro.models.schemas import InspectionReport, ProbeReport, ProbeExecutionResult
 from kuro.sandbox.runner import DockerSandboxRunner
 
@@ -23,6 +23,12 @@ class DynamicRuntimeProbe:
     def __init__(self, runner: DockerSandboxRunner):
         self.runner = runner
 
+    def _run_probe(
+        self, binary_path: str, args: Optional[List[str]] = None, stdin_input: str = ""
+    ) -> ProbeExecutionResult:
+        """Executes a binary probe run with stdin defaulted to '' (EOF) to prevent hanging on interactive inputs."""
+        return self.runner.run_binary(binary_path, args=args, stdin_input=stdin_input)
+
     def probe(self, binary_path: str, inspection: InspectionReport) -> ProbeReport:
         """Executes exploratory probes and compiles a structured ProbeReport."""
         sample_runs: List[ProbeExecutionResult] = []
@@ -33,7 +39,7 @@ class DynamicRuntimeProbe:
 
         # 1. Standard probe commands
         for args in self.COMMON_PROBE_ARGS:
-            res = self.runner.run_binary(binary_path, args=args)
+            res = self._run_probe(binary_path, args=args)
             sample_runs.append(res)
             full_output = f"{res.stdout}\n{res.stderr}".strip()
 
@@ -49,7 +55,7 @@ class DynamicRuntimeProbe:
         for flag in heuristic_flags:
             detected_flags.add(flag)
             # Try running with flag
-            res = self.runner.run_binary(binary_path, args=[flag])
+            res = self._run_probe(binary_path, args=[flag])
             sample_runs.append(res)
             if res.exit_code == 0 or "Usage" in res.stdout or "Error" in res.stderr:
                 detected_flags.add(flag)
@@ -66,7 +72,7 @@ class DynamicRuntimeProbe:
             if clean_name in ("reverse", "stats", "sum", "calc", "encrypt", "decrypt", "cipher"):
                 detected_subcommands.add(clean_name)
                 # Try running subcommand
-                res = self.runner.run_binary(binary_path, args=[clean_name])
+                res = self._run_probe(binary_path, args=[clean_name])
                 sample_runs.append(res)
 
         summary = f"Binary accepts flags: {list(detected_flags)} and subcommands: {list(detected_subcommands)}."
