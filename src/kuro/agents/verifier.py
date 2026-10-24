@@ -1,5 +1,7 @@
 import random
+import re
 import string
+from pathlib import Path
 from typing import List, Optional, Tuple
 from kuro.models.schemas import (
     DefectReport,
@@ -52,7 +54,17 @@ class DifferentialParityVerifier:
                 )
 
             # 3. Compare outputs
-            stdout_matched = (leg_res.stdout.strip() == mod_res.stdout.strip())
+            norm_leg_stdout = self._normalize_stdout(
+                leg_res.stdout,
+                legacy_bin_path=legacy_binary_path,
+                modern_entry_file=modern_entry_file,
+            )
+            norm_mod_stdout = self._normalize_stdout(
+                mod_res.stdout,
+                legacy_bin_path=legacy_binary_path,
+                modern_entry_file=modern_entry_file,
+            )
+            stdout_matched = (norm_leg_stdout == norm_mod_stdout)
             exit_code_matched = (leg_res.exit_code == mod_res.exit_code)
             passed = stdout_matched and exit_code_matched
 
@@ -99,6 +111,38 @@ class DifferentialParityVerifier:
             defects=defects,
             is_fully_parity_proven=(failed_count == 0),
         )
+
+    def _normalize_stdout(
+        self,
+        text: str,
+        legacy_bin_path: Optional[str] = None,
+        modern_entry_file: Optional[str] = None,
+    ) -> str:
+        """Normalizes executable names in stdout (e.g., ./cipher, python3 main.py -> [PROG])
+
+        so help/usage text parity doesn't fail due to file naming differences.
+        """
+        if not text:
+            return ""
+
+        norm = text.strip()
+
+        if modern_entry_file:
+            entry_name = Path(modern_entry_file).name
+            norm = re.sub(rf"python3?\s+(-B\s+)?(\./)?{re.escape(entry_name)}", "[PROG]", norm)
+            norm = re.sub(rf"(\./)?{re.escape(entry_name)}", "[PROG]", norm)
+
+        if legacy_bin_path:
+            bin_name = Path(legacy_bin_path).name
+            names = [bin_name]
+            if "_stripped" in bin_name:
+                names.append(bin_name.replace("_stripped", ""))
+            for b in names:
+                norm = re.sub(rf"(\./)?{re.escape(b)}", "[PROG]", norm)
+
+        norm = re.sub(r"python3?\s+(-B\s+)?(\./)?main\.py", "[PROG]", norm)
+        norm = re.sub(r"(\./)?main\.py", "[PROG]", norm)
+        return norm
 
     def _generate_test_vectors(
         self, probe: ProbeReport, count: int = 25
