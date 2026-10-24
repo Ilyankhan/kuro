@@ -69,3 +69,31 @@ def test_synthesizer_on_go_benchmark():
 
     # Cleanup
     shutil.rmtree(target_dir)
+
+
+def test_clean_json_markdown_fences():
+    fenced = '```json\n{"target_language": "python", "entry_point_file": "main.py", "files": [], "architecture_overview": "test"}\n```'
+    cleaned = CodeSynthesizer._clean_json_markdown(fenced)
+    assert not cleaned.startswith("```")
+    assert not cleaned.endswith("```")
+    assert '"target_language": "python"' in cleaned
+
+
+def test_gemini_synthesis_error_handling(monkeypatch):
+    from unittest.mock import MagicMock
+    import pytest
+
+    synthesizer = CodeSynthesizer(api_key="fake-test-key")
+    mock_client = MagicMock()
+    mock_client.models.generate_content.side_effect = RuntimeError("API quota exceeded")
+    monkeypatch.setattr(synthesizer, "_get_client", lambda: mock_client)
+    synthesizer._client = mock_client
+
+    inspector = BinaryInspector("/home/ilyan/random/kuro/benchmarks/c_cipher/cipher")
+    inspection = inspector.inspect()
+    probe = DynamicRuntimeProbe(DockerSandboxRunner(image="kuro-sandbox"))
+    probe_report = probe.probe("/home/ilyan/random/kuro/benchmarks/c_cipher/cipher", inspection)
+
+    with pytest.raises(RuntimeError, match="Gemini API code synthesis failed"):
+        synthesizer.synthesize(inspection, probe_report)
+

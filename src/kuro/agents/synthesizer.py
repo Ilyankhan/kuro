@@ -93,18 +93,39 @@ Sample Runs:
 Please fix the logic to satisfy these failing test cases!
 """
 
-        response = self._client.models.generate_content(
-            model=self.model_name,
-            contents=[prompt],
-            config=types.GenerateContentConfig(
-                system_instruction=self.SYSTEM_PROMPT,
-                response_mime_type="application/json",
-                response_schema=SynthesizedProject,
-                temperature=0.2,
-            ),
-        )
+        raw_text = ""
+        try:
+            response = self._client.models.generate_content(
+                model=self.model_name,
+                contents=[prompt],
+                config=types.GenerateContentConfig(
+                    system_instruction=self.SYSTEM_PROMPT,
+                    response_mime_type="application/json",
+                    response_schema=SynthesizedProject,
+                    temperature=0.2,
+                ),
+            )
+            raw_text = getattr(response, "text", "") or ""
+            cleaned_text = self._clean_json_markdown(raw_text)
+            return SynthesizedProject.model_validate_json(cleaned_text)
+        except Exception as e:
+            diagnostic_msg = (
+                f"Gemini API code synthesis failed: {type(e).__name__}: {e}. "
+                f"Model: {self.model_name}, Response text preview: {raw_text[:200] if raw_text else 'None'}"
+            )
+            raise RuntimeError(diagnostic_msg) from e
 
-        return SynthesizedProject.model_validate_json(response.text)
+    @staticmethod
+    def _clean_json_markdown(text: str) -> str:
+        """Strips leading ```json and trailing ``` markdown code fences."""
+        cleaned = text.strip()
+        if cleaned.startswith("```json"):
+            cleaned = cleaned[7:]
+        elif cleaned.startswith("```"):
+            cleaned = cleaned[3:]
+        if cleaned.endswith("```"):
+            cleaned = cleaned[:-3]
+        return cleaned.strip()
 
     def _synthesize_algorithmic_baseline(
         self,
