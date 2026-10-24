@@ -1,3 +1,4 @@
+import os
 import subprocess
 import time
 from pathlib import Path
@@ -23,6 +24,11 @@ class DockerSandboxRunner:
         bin_path = Path(host_binary_path).resolve()
         if not bin_path.exists():
             raise FileNotFoundError(f"Binary not found: {host_binary_path}")
+
+        try:
+            os.chmod(bin_path, 0o755)
+        except Exception:
+            pass
 
         args = args or []
         timeout = timeout or self.timeout_seconds
@@ -109,6 +115,7 @@ class DockerSandboxRunner:
             "-w", "/workspace",
             self.image,
             "python3",
+            "-B",
             entry_file,
             *args,
         ]
