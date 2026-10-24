@@ -1,6 +1,11 @@
 import os
 from pathlib import Path
+from dotenv import load_dotenv
 from pydantic import BaseModel, Field
+
+# Load environment variables from project root .env file
+_env_path = Path(__file__).resolve().parent.parent.parent / ".env"
+load_dotenv(dotenv_path=_env_path)
 
 class KuroConfig(BaseModel):
     """Central configuration for Kuro multi-agent modernization engine."""
