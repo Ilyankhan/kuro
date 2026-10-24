@@ -10,7 +10,7 @@ load_dotenv(dotenv_path=_env_path)
 class KuroConfig(BaseModel):
     """Central configuration for Kuro multi-agent modernization engine."""
     gemini_api_key: str = Field(default_factory=lambda: os.getenv("GEMINI_API_KEY", ""))
-    gemini_model: str = Field(default="gemini-2.5-flash")
+    gemini_model: str = Field(default="gemini-3.8-flash")
     docker_image: str = Field(default="kuro-sandbox")
     max_repair_cycles: int = Field(default=3)
     default_test_cases: int = Field(default=50)

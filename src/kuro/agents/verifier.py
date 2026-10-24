@@ -149,38 +149,38 @@ class DifferentialParityVerifier:
     ) -> List[Tuple[List[str], Optional[str]]]:
         """Generates fuzzing vectors covering known flags, edge cases, and invalid inputs."""
         vectors: List[Tuple[List[str], Optional[str]]] = [
-            ([], None),
-            (["-h"], None),
-            (["--help"], None),
-            (["--invalid-flag-edge-test"], None),
+            ([], ""),
+            (["-h"], ""),
+            (["--help"], ""),
+            (["--invalid-flag-edge-test"], ""),
         ]
 
         # Add tests for detected subcommands
         for sub in probe.detected_subcommands:
-            vectors.append(([sub], None))
+            vectors.append(([sub], ""))
             if sub == "reverse":
-                vectors.append(([sub, "hello"], None))
-                vectors.append(([sub, ""], None))
-                vectors.append(([sub, "racecar"], None))
-                vectors.append(([sub, "a b c d 123 !@#"], None))
+                vectors.append(([sub, "hello"], ""))
+                vectors.append(([sub, ""], ""))
+                vectors.append(([sub, "racecar"], ""))
+                vectors.append(([sub, "a b c d 123 !@#"], ""))
             elif sub == "stats":
-                vectors.append(([sub, "10", "20", "30"], None))
-                vectors.append(([sub, "0", "-5", "100.5"], None))
-                vectors.append(([sub, "invalid_num"], None))
-                vectors.append(([sub], None))
+                vectors.append(([sub, "10", "20", "30"], ""))
+                vectors.append(([sub, "0", "-5", "100.5"], ""))
+                vectors.append(([sub, "invalid_num"], ""))
+                vectors.append(([sub], ""))
 
         # Add tests for detected flags
         if "-e" in probe.supported_flags or "-d" in probe.supported_flags:
-            vectors.append((["-e", "hello world", "-k", "5"], None))
-            vectors.append((["-d", "mjqqt btwqi", "-k", "5"], None))
-            vectors.append((["-e", "Test 123!", "-k", "13"], None))
-            vectors.append((["-e", ""], None))
-            vectors.append((["-k", "999"], None))
+            vectors.append((["-e", "hello world", "-k", "5"], ""))
+            vectors.append((["-d", "mjqqt btwqi", "-k", "5"], ""))
+            vectors.append((["-e", "Test 123!", "-k", "13"], ""))
+            vectors.append((["-e", ""], ""))
+            vectors.append((["-k", "999"], ""))
 
         # Fill remaining with randomized inputs
         while len(vectors) < count:
             rand_str = "".join(random.choices(string.ascii_letters + string.digits, k=8))
-            vectors.append(([rand_str], None))
+            vectors.append(([rand_str], ""))
 
         return vectors[:count]
 

@@ -29,8 +29,8 @@ Strict Engineering Rules:
 5. You MUST output ONLY valid JSON matching the SynthesizedProject schema.
 """
 
-    def __init__(self, api_key: Optional[str] = None, model_name: str = "gemini-2.5-flash"):
-        self.api_key = api_key or os.getenv("GEMINI_API_KEY", "")
+    def __init__(self, api_key: Optional[str] = None, model_name: str = "gemini-3.8-flash"):
+        self.api_key = api_key if api_key is not None else os.getenv("GEMINI_API_KEY", "")
         self.model_name = model_name
         self._client = None
 
@@ -46,15 +46,25 @@ Strict Engineering Rules:
         probe: ProbeReport,
         target_language: str = "python",
         defects: Optional[List[DefectReport]] = None,
+        force_baseline: bool = False,
     ) -> SynthesizedProject:
         """Synthesizes a modern multi-file project. Uses Gemini Flash when API key is present,
 
         or algorithmic code synthesis templates for offline testing.
         """
+        if force_baseline:
+            return self._synthesize_algorithmic_baseline(inspection, probe, target_language, defects)
+
         client = self._get_client()
 
         if client:
-            return self._synthesize_with_gemini(inspection, probe, target_language, defects)
+            try:
+                return self._synthesize_with_gemini(inspection, probe, target_language, defects)
+            except Exception as e:
+                if os.getenv("KURO_STRICT_LLM", "false").lower() == "true":
+                    raise
+                # Graceful fallback to baseline
+                return self._synthesize_algorithmic_baseline(inspection, probe, target_language, defects)
         else:
             return self._synthesize_algorithmic_baseline(inspection, probe, target_language, defects)
 
@@ -159,18 +169,44 @@ import sys
 import argparse
 from src.core import transform
 
+def print_help(file=sys.stdout):
+    prog = sys.argv[0]
+    file.write(f"Usage: {prog} [-e|-d] <text> [-k <key>]\\n")
+    file.write("Options:\\n")
+    file.write("  -e <text>   Encrypt text\\n")
+    file.write("  -d <text>   Decrypt text\\n")
+    file.write("  -k <key>    Integer key (1-255, default: 13)\\n")
+    file.write("  -h, --help  Show this help message\\n")
+
+class CipherArgumentParser(argparse.ArgumentParser):
+    def print_help(self, file=None):
+        if file is None:
+            file = sys.stdout
+        print_help(file)
+
+    def print_usage(self, file=None):
+        self.print_help(file)
+
+    def error(self, message):
+        print_help(sys.stderr)
+        sys.exit(1)
+
 def main():
-    parser = argparse.ArgumentParser(description="Modernized cipher utility")
+    if len(sys.argv) < 2:
+        print_help(sys.stdout)
+        sys.exit(1)
+
+    parser = CipherArgumentParser(add_help=False)
+    parser.add_argument("-h", "--help", action="store_true", dest="show_help")
     parser.add_argument("-e", dest="encrypt_text", help="Encrypt text")
     parser.add_argument("-d", dest="decrypt_text", help="Decrypt text")
     parser.add_argument("-k", dest="key", type=int, default=13, help="Integer key (1-255)")
 
-    # Print help if no args provided
-    if len(sys.argv) < 2:
-        print(f"Usage: {sys.argv[0]} [-e|-d] <text> [-k <key>]\\nOptions:\\n  -e <text>   Encrypt text\\n  -d <text>   Decrypt text\\n  -k <key>    Integer key (1-255, default: 13)\\n  -h, --help  Show this help message")
-        sys.exit(1)
+    args, unknown = parser.parse_known_args()
 
-    args = parser.parse_args()
+    if args.show_help:
+        print_help(sys.stdout)
+        sys.exit(0)
 
     if args.key <= 0 or args.key > 255:
         sys.stderr.write("Error: key must be between 1 and 255\\n")

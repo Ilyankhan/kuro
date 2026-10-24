@@ -53,7 +53,7 @@ class DockerSandboxRunner:
         try:
             proc = subprocess.run(
                 cmd,
-                input=stdin_input,
+                input=stdin_input if stdin_input is not None else "",
                 capture_output=True,
                 text=True,
                 timeout=timeout,
@@ -124,7 +124,7 @@ class DockerSandboxRunner:
         try:
             proc = subprocess.run(
                 cmd,
-                input=stdin_input,
+                input=stdin_input if stdin_input is not None else "",
                 capture_output=True,
                 text=True,
                 timeout=timeout,

@@ -83,6 +83,7 @@ def test_gemini_synthesis_error_handling(monkeypatch):
     from unittest.mock import MagicMock
     import pytest
 
+    monkeypatch.setenv("KURO_STRICT_LLM", "true")
     synthesizer = CodeSynthesizer(api_key="fake-test-key")
     mock_client = MagicMock()
     mock_client.models.generate_content.side_effect = RuntimeError("API quota exceeded")
