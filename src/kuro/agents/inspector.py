@@ -51,7 +51,7 @@ class BinaryInspector:
         is_stripped = self._check_if_stripped()
         entry_point = self._extract_entry_point()
         strings = self._extract_meaningful_strings(limit=100)
-        functions, go_pkg = self._extract_functions(origin)
+        functions, go_pkg = self._extract_functions(origin, entry_point=entry_point)
 
         return InspectionReport(
             binary_path=str(self.path),
@@ -173,7 +173,7 @@ class BinaryInspector:
             return []
 
     def _extract_functions(
-        self, origin: BinaryLanguageOrigin
+        self, origin: BinaryLanguageOrigin, entry_point: Optional[str] = None
     ) -> Tuple[List[FunctionSymbol], Optional[str]]:
         """Extracts domain functions, filtering out standard runtime clutter."""
         functions: List[FunctionSymbol] = []
@@ -215,43 +215,117 @@ class BinaryInspector:
 
         # If binary is stripped or nm yielded zero functions, disassemble entry point
         if not functions:
-            functions = self._extract_from_disassembly()
+            functions = self._extract_from_disassembly(entry_point=entry_point)
 
         return functions, go_package
 
-    def _extract_from_disassembly(self) -> List[FunctionSymbol]:
-        """Fallback function extractor using objdump disassembly."""
+    def _extract_from_disassembly(self, entry_point: Optional[str] = None) -> List[FunctionSymbol]:
+        """Fallback function extractor using objdump disassembly and entry point analysis."""
         functions: List[FunctionSymbol] = []
+        entry_point = entry_point or self._extract_entry_point()
+
         try:
             res = subprocess.run(
                 ["objdump", "-d", "--no-show-raw-insn", str(self.path)],
                 capture_output=True,
                 text=True,
             )
-            # Find function headers e.g. "0000000000001149 <main>:"
+            raw_lines = res.stdout.splitlines()
+
+            # 1. Search for named symbols if any exist
             fn_regex = re.compile(r"^([0-9a-fA-F]+)\s+<([^>]+)>:")
             current_fn: Optional[FunctionSymbol] = None
             preview_lines: List[str] = []
 
-            for line in res.stdout.splitlines():
+            for line in raw_lines:
                 match = fn_regex.match(line)
                 if match:
                     if current_fn:
-                        current_fn.disassembly_preview = "\n".join(preview_lines[:15])
+                        current_fn.disassembly_preview = "\n".join(preview_lines[:20])
                         functions.append(current_fn)
                     addr, name = match.group(1), match.group(2)
-                    if not name.startswith(("_", "deregister_", "register_")):
+                    # Filter out sections (.text, .init, .plt) and PLT stubs
+                    if not (name.startswith((".", "_", "deregister_", "register_")) or "@plt" in name):
                         current_fn = FunctionSymbol(name=name, address=addr)
                         preview_lines = []
                     else:
                         current_fn = None
                 elif current_fn and line.strip():
-                    if len(preview_lines) < 15:
+                    if len(preview_lines) < 20:
                         preview_lines.append(line.strip())
 
             if current_fn:
-                current_fn.disassembly_preview = "\n".join(preview_lines[:15])
+                current_fn.disassembly_preview = "\n".join(preview_lines[:20])
                 functions.append(current_fn)
+
+            # 2. If stripped or no named domain functions were found, locate entry point
+            if not functions and entry_point:
+                target_entry_int = int(entry_point, 16)
+                inst_regex = re.compile(r"^\s*([0-9a-fA-F]+):\s*(.*)$")
+                entry_insts: List[str] = []
+                main_candidate_addr: Optional[int] = None
+                collecting_entry = False
+
+                for line in raw_lines:
+                    inst_match = inst_regex.match(line)
+                    if inst_match:
+                        addr = int(inst_match.group(1), 16)
+                        if addr == target_entry_int:
+                            collecting_entry = True
+
+                        if collecting_entry:
+                            entry_insts.append(line.strip())
+                            # Check for reference to main function (e.g. in %rdi for __libc_start_main)
+                            rip_ref = re.search(r"#\s*([0-9a-fA-F]+)", line)
+                            if rip_ref and not main_candidate_addr:
+                                try:
+                                    ref_addr = int(rip_ref.group(1), 16)
+                                    if ref_addr != target_entry_int and ref_addr > 0:
+                                        main_candidate_addr = ref_addr
+                                except ValueError:
+                                    pass
+
+                            # Stop entry block at hlt or ret or max lines
+                            if any(term in line for term in ("hlt", "ret")) or len(entry_insts) >= 25:
+                                collecting_entry = False
+
+                if entry_insts:
+                    functions.append(
+                        FunctionSymbol(
+                            name="entry_point",
+                            address=entry_point,
+                            is_exported=True,
+                            disassembly_preview="\n".join(entry_insts[:20]),
+                        )
+                    )
+
+                # If entry code references a primary execution block (like main), extract it
+                if main_candidate_addr:
+                    main_insts: List[str] = []
+                    collecting_main = False
+                    for line in raw_lines:
+                        inst_match = inst_regex.match(line)
+                        if inst_match:
+                            addr = int(inst_match.group(1), 16)
+                            if addr == main_candidate_addr:
+                                collecting_main = True
+
+                            if collecting_main:
+                                main_insts.append(line.strip())
+                                if any(term in line for term in ("hlt", "ret")) and len(main_insts) > 5:
+                                    break
+                                if len(main_insts) >= 30:
+                                    break
+
+                    if main_insts:
+                        functions.append(
+                            FunctionSymbol(
+                                name="main",
+                                address=hex(main_candidate_addr),
+                                is_exported=True,
+                                disassembly_preview="\n".join(main_insts[:25]),
+                            )
+                        )
         except Exception:
             pass
 

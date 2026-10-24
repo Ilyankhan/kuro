@@ -37,3 +37,21 @@ def test_inspector_on_go_binary():
     # Domain functions must be identified
     assert any("main.ComputeStats" in f or "ComputeStats" in f for f in fn_names)
     assert any("main.ReverseString" in f or "ReverseString" in f for f in fn_names)
+
+
+def test_inspector_on_stripped_c_binary():
+    bin_path = "/home/ilyan/random/kuro/benchmarks/c_cipher/cipher_stripped"
+    inspector = BinaryInspector(bin_path)
+    report = inspector.inspect()
+
+    assert report.architecture == ArchitectureType.X86_64
+    assert report.is_stripped is True
+    assert report.entry_point is not None
+
+    fn_names = [f.name for f in report.functions]
+    assert "entry_point" in fn_names
+    # Primary execution block
+    assert len(report.functions) >= 1
+    entry_fn = next(f for f in report.functions if f.name == "entry_point")
+    assert entry_fn.disassembly_preview is not None
+    assert len(entry_fn.disassembly_preview) > 0
