@@ -21,8 +21,8 @@ Unlike traditional decompilers (Ghidra, IDA Pro) that output unintelligible asse
 
 ```
                   ┌───────────────────────────────┐
-                  │       Web Dashboard (UI)      │
-                  │   (Vite + React + Tailwind)   │
+                  │      Streamlit Dashboard      │
+                  │   (Pure Python + Live Cards)  │
                   └───────────────┬───────────────┘
                                   │ Upload Binary & Options
                                   ▼

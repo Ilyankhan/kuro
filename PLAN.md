@@ -1,7 +1,7 @@
 # Kuro: Detailed Implementation Plan & Phased Roadmap
 
 ## Overview
-This roadmap decomposes **Kuro** (Autonomous Binary Modernization Swarm) into discrete, testable phases. In accordance with requirements, this plan focuses entirely on the core engine, low-level binary tooling, multi-agent LangGraph orchestration, Docker sandboxing, and differential verification. (Frontend UI is deferred to later phases).
+This roadmap decomposes **Kuro** (Autonomous Binary Modernization Swarm) into discrete, testable phases. In accordance with requirements, this plan focuses entirely on the core engine, low-level binary tooling, multi-agent LangGraph orchestration, Docker sandboxing, and differential verification. - **Frontend UI:** Streamlit pure Python dashboard (live agent step visualization, side-by-side assembly/code diff, file uploader, and zip export).
 
 ---
 
