@@ -250,7 +250,7 @@ if selected_binary_path:
                         st.write("No functions extracted.")
                 with tab2:
                     if inspection:
-                        st.dataframe(inspection.extracted_strings, columns=["Strings"], use_container_width=True)
+                        st.dataframe({"Strings": inspection.extracted_strings}, use_container_width=True)
                 with tab3:
                     probe = final_state.get("probe_report")
                     if probe:
