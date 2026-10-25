@@ -108,34 +108,54 @@ uploaded_file = st.file_uploader(
 # Demo benchmark pre-selection helper
 st.caption("Or test with included benchmarks:")
 col_b1, col_b2, _ = st.columns([1, 1, 3])
-load_cipher = col_b1.button("📁 Load C Cipher Benchmark")
-load_calc = col_b2.button("📁 Load Go Calc Benchmark")
 
-selected_binary_path = None
-binary_display_name = ""
+if "selected_binary_path" not in st.session_state:
+    st.session_state.selected_binary_path = None
+if "binary_display_name" not in st.session_state:
+    st.session_state.binary_display_name = ""
+if "is_running" not in st.session_state:
+    st.session_state.is_running = False
+
+load_cipher = col_b1.button(
+    "📁 Load C Cipher Benchmark",
+    disabled=st.session_state.is_running,
+)
+load_calc = col_b2.button(
+    "📁 Load Go Calc Benchmark",
+    disabled=st.session_state.is_running,
+)
 
 if uploaded_file is not None:
     temp_bin = tempfile.NamedTemporaryFile(delete=False, prefix="kuro_upload_")
     temp_bin.write(uploaded_file.getbuffer())
     temp_bin.close()
     os.chmod(temp_bin.name, 0o755)
-    selected_binary_path = temp_bin.name
-    binary_display_name = uploaded_file.name
+    st.session_state.selected_binary_path = temp_bin.name
+    st.session_state.binary_display_name = uploaded_file.name
 elif load_cipher:
-    bench_path = Path("/home/ilyan/random/kuro/benchmarks/c_cipher/cipher")
+    bench_path = Path(__file__).resolve().parents[3] / "benchmarks" / "c_cipher" / "cipher"
     if bench_path.exists():
-        selected_binary_path = str(bench_path)
-        binary_display_name = "benchmarks/c_cipher/cipher (C ELF)"
+        st.session_state.selected_binary_path = str(bench_path)
+        st.session_state.binary_display_name = "benchmarks/c_cipher/cipher (C ELF)"
+    else:
+        st.error(f"Benchmark file not found at {bench_path}")
 elif load_calc:
-    bench_path = Path("/home/ilyan/random/kuro/benchmarks/go_calc/aegis_sample")
+    bench_path = Path(__file__).resolve().parents[3] / "benchmarks" / "go_calc" / "aegis_sample"
     if bench_path.exists():
-        selected_binary_path = str(bench_path)
-        binary_display_name = "benchmarks/go_calc/aegis_sample (Go ELF)"
+        st.session_state.selected_binary_path = str(bench_path)
+        st.session_state.binary_display_name = "benchmarks/go_calc/aegis_sample (Go ELF)"
+    else:
+        st.error(f"Benchmark file not found at {bench_path}")
+
+selected_binary_path = st.session_state.selected_binary_path
+binary_display_name = st.session_state.binary_display_name
 
 if selected_binary_path:
     st.info(f"Target Binary: `{binary_display_name}`")
 
-    if st.button("🚀 Run Autonomous Modernization", type="primary"):
+    run_disabled = st.session_state.is_running
+    if st.button("🚀 Run Autonomous Modernization", type="primary", disabled=run_disabled):
+        st.session_state.is_running = True
         orchestrator = KuroOrchestrator(
             api_key=gemini_api_key,
             max_retries=max_repair_cycles,
@@ -148,46 +168,49 @@ if selected_binary_path:
         final_state = None
 
         with status_box:
-            for event in orchestrator.stream_run(
-                binary_path=selected_binary_path,
-                target_language=target_lang,
-            ):
-                node_name = event["node"]
-                state = event["state"]
-                final_state = state
+            try:
+                for event in orchestrator.stream_run(
+                    binary_path=selected_binary_path,
+                    target_language=target_lang,
+                ):
+                    node_name = event["node"]
+                    state = event["state"]
+                    final_state = state
 
-                if node_name == "inspector":
-                    insp = state.get("inspection_report")
-                    st.write(
-                        f"✅ **[Inspector]** {insp.architecture.value} ELF "
-                        f"({'stripped' if insp.is_stripped else 'unstripped'}) | "
-                        f"{len(insp.functions)} functions | {len(insp.extracted_strings)} strings"
-                    )
-                elif node_name == "probe":
-                    probe = state.get("probe_report")
-                    st.write(
-                        f"✅ **[Runtime Probe]** Discovered flags: `{probe.supported_flags}` | "
-                        f"Subcommands: `{probe.detected_subcommands}`"
-                    )
-                elif node_name == "synthesizer":
-                    synth = state.get("candidate_code")
-                    retry = state.get("retry_count", 0)
-                    tag = f"Repair Cycle {retry}" if retry > 0 else "Initial Synthesis"
-                    st.write(
-                        f"✅ **[Synthesizer ({tag})]** Generated {len(synth.files)} files "
-                        f"(entry: `{synth.entry_point_file}`)"
-                    )
-                elif node_name == "verifier":
-                    ver = state.get("verification_report")
-                    st.write(
-                        f"⚖️ **[Parity Verifier]** Parity: **{ver.parity_percentage}%** "
-                        f"({ver.passed_tests}/{ver.total_tests} passed, {ver.failed_tests} defects)"
-                    )
+                    if node_name == "inspector":
+                        insp = state.get("inspection_report")
+                        st.write(
+                            f"✅ **[Inspector]** {insp.architecture.value} ELF "
+                            f"({'stripped' if insp.is_stripped else 'unstripped'}) | "
+                            f"{len(insp.functions)} functions | {len(insp.extracted_strings)} strings"
+                        )
+                    elif node_name == "probe":
+                        probe = state.get("probe_report")
+                        st.write(
+                            f"✅ **[Runtime Probe]** Discovered flags: `{probe.supported_flags}` | "
+                            f"Subcommands: `{probe.detected_subcommands}`"
+                        )
+                    elif node_name == "synthesizer":
+                        synth = state.get("candidate_code")
+                        retry = state.get("retry_count", 0)
+                        tag = f"Repair Cycle {retry}" if retry > 0 else "Initial Synthesis"
+                        st.write(
+                            f"✅ **[Synthesizer ({tag})]** Generated {len(synth.files)} files "
+                            f"(entry: `{synth.entry_point_file}`)"
+                        )
+                    elif node_name == "verifier":
+                        ver = state.get("verification_report")
+                        st.write(
+                            f"⚖️ **[Parity Verifier]** Parity: **{ver.parity_percentage}%** "
+                            f"({ver.passed_tests}/{ver.total_tests} passed, {ver.failed_tests} defects)"
+                        )
 
-            if final_state and final_state.get("status") == "parity_proven":
-                status_box.update(label="✨ Modernization Complete — 100% Parity Proven!", state="complete", expanded=False)
-            else:
-                status_box.update(label="Modernization Finished (Inspect parity results below)", state="complete", expanded=False)
+                if final_state and final_state.get("status") == "parity_proven":
+                    status_box.update(label="✨ Modernization Complete — 100% Parity Proven!", state="complete", expanded=False)
+                else:
+                    status_box.update(label="Modernization Finished (Inspect parity results below)", state="complete", expanded=False)
+            finally:
+                st.session_state.is_running = False
 
         # Results Dashboard
         if final_state:
