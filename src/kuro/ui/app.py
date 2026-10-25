@@ -245,7 +245,7 @@ if selected_binary_path:
                         )
                         for f in inspection.functions:
                             if f.name == selected_func:
-                                st.code(f.instructions or "(No disassembly available)", language="nasm")
+                                st.code(f.disassembly_preview or "(No disassembly available)", language="nasm")
                     else:
                         st.write("No functions extracted.")
                 with tab2:

@@ -29,15 +29,20 @@ Strict Engineering Rules:
 5. You MUST output ONLY valid JSON matching the SynthesizedProject schema.
 """
 
-    def __init__(self, api_key: Optional[str] = None, model_name: str = "gemini-3.8-flash"):
-        self.api_key = api_key if api_key is not None else os.getenv("GEMINI_API_KEY", "")
-        self.model_name = model_name
+    def __init__(self, api_key: Optional[str] = None, model_name: Optional[str] = None):
+        from kuro.config import settings
+        self.api_key = api_key if api_key is not None else settings.gemini_api_key
+        self.model_name = model_name or settings.gemini_model
         self._client = None
 
     def _get_client(self):
         if self._client is None and self.api_key:
             from google import genai
-            self._client = genai.Client(api_key=self.api_key)
+            from google.genai import types
+            self._client = genai.Client(
+                api_key=self.api_key,
+                http_options=types.HttpOptions(timeout=60000),
+            )
         return self._client
 
     def synthesize(
