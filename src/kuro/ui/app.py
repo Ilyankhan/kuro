@@ -115,6 +115,8 @@ if "binary_display_name" not in st.session_state:
     st.session_state.binary_display_name = ""
 if "is_running" not in st.session_state:
     st.session_state.is_running = False
+if "final_state" not in st.session_state:
+    st.session_state.final_state = None
 
 load_cipher = col_b1.button(
     "📁 Load C Cipher Benchmark",
@@ -156,6 +158,7 @@ if selected_binary_path:
     run_disabled = st.session_state.is_running
     if st.button("🚀 Run Autonomous Modernization", type="primary", disabled=run_disabled):
         st.session_state.is_running = True
+        st.session_state.final_state = None  # reset previous results
         orchestrator = KuroOrchestrator(
             api_key=gemini_api_key,
             max_retries=max_repair_cycles,
@@ -165,8 +168,6 @@ if selected_binary_path:
         st.subheader("Live Execution Telemetry")
         status_box = st.status("Initializing Kuro autonomous loop...", expanded=True)
 
-        final_state = None
-
         with status_box:
             try:
                 for event in orchestrator.stream_run(
@@ -175,7 +176,7 @@ if selected_binary_path:
                 ):
                     node_name = event["node"]
                     state = event["state"]
-                    final_state = state
+                    st.session_state.final_state = state
 
                     if node_name == "inspector":
                         insp = state.get("inspection_report")
@@ -205,86 +206,87 @@ if selected_binary_path:
                             f"({ver.passed_tests}/{ver.total_tests} passed, {ver.failed_tests} defects)"
                         )
 
-                if final_state and final_state.get("status") == "parity_proven":
+                if st.session_state.final_state and st.session_state.final_state.get("status") == "parity_proven":
                     status_box.update(label="✨ Modernization Complete — 100% Parity Proven!", state="complete", expanded=False)
                 else:
                     status_box.update(label="Modernization Finished (Inspect parity results below)", state="complete", expanded=False)
             finally:
                 st.session_state.is_running = False
 
-        # Results Dashboard
-        if final_state:
-            st.divider()
-            ver_report = final_state.get("verification_report")
-            candidate = final_state.get("candidate_code")
-            inspection = final_state.get("inspection_report")
+# Results Dashboard — persists across reruns via session_state
+if st.session_state.final_state:
+    final_state = st.session_state.final_state
+    st.divider()
+    ver_report = final_state.get("verification_report")
+    candidate = final_state.get("candidate_code")
+    inspection = final_state.get("inspection_report")
 
-            # Top Metrics
-            m1, m2, m3, m4 = st.columns(4)
-            if ver_report:
-                m1.metric("Parity Score", f"{ver_report.parity_percentage}%", delta=f"{ver_report.passed_tests}/{ver_report.total_tests} passed")
-                m2.metric("Defects", f"{ver_report.failed_tests}")
-            if candidate:
-                m3.metric("Synthesized Files", f"{len(candidate.files)}")
+    # Top Metrics
+    m1, m2, m3, m4 = st.columns(4)
+    if ver_report:
+        m1.metric("Parity Score", f"{ver_report.parity_percentage}%", delta=f"{ver_report.passed_tests}/{ver_report.total_tests} passed")
+        m2.metric("Defects", f"{ver_report.failed_tests}")
+    if candidate:
+        m3.metric("Synthesized Files", f"{len(candidate.files)}")
+    if inspection:
+        m4.metric("Architecture", inspection.architecture.value)
+
+    st.divider()
+
+    # Side-by-side Inspection & Code Synthesis
+    col_left, col_right = st.columns(2)
+
+    with col_left:
+        st.subheader("🔍 Reverse Engineered Binary")
+        tab1, tab2, tab3 = st.tabs(["Disassembly", "Extracted Strings", "Probe CLI"])
+        with tab1:
+            if inspection and inspection.functions:
+                selected_func = st.selectbox(
+                    "Domain Function",
+                    options=[f.name for f in inspection.functions],
+                )
+                for f in inspection.functions:
+                    if f.name == selected_func:
+                        st.code(f.disassembly_preview or "(No disassembly available)", language="nasm")
+            else:
+                st.write("No functions extracted.")
+        with tab2:
             if inspection:
-                m4.metric("Architecture", inspection.architecture.value)
+                st.dataframe({"Strings": inspection.extracted_strings}, use_container_width=True)
+        with tab3:
+            probe = final_state.get("probe_report")
+            if probe:
+                st.text(probe.help_text or "No CLI help output captured")
 
-            st.divider()
+    with col_right:
+        st.subheader("✨ Synthesized Modern Repository")
+        if candidate and candidate.files:
+            file_options = [f.path for f in candidate.files]
+            chosen_file_path = st.selectbox("View Source File", options=file_options)
+            for f in candidate.files:
+                if f.path == chosen_file_path:
+                    lang = "python" if chosen_file_path.endswith(".py") else "go"
+                    st.code(f.content, language=lang)
 
-            # Side-by-side Inspection & Code Synthesis
-            col_left, col_right = st.columns(2)
+            # Zip Download
+            zip_data = create_project_zip(candidate.files)
+            st.download_button(
+                label="⬇️ Download Modernized Project (.zip)",
+                data=zip_data,
+                file_name="kuro_modernized_project.zip",
+                mime="application/zip",
+                type="primary",
+                use_container_width=True,
+            )
+        else:
+            st.warning("No candidate code generated.")
 
-            with col_left:
-                st.subheader("🔍 Reverse Engineered Binary")
-                tab1, tab2, tab3 = st.tabs(["Disassembly", "Extracted Strings", "Probe CLI"])
-                with tab1:
-                    if inspection and inspection.functions:
-                        selected_func = st.selectbox(
-                            "Domain Function",
-                            options=[f.name for f in inspection.functions],
-                        )
-                        for f in inspection.functions:
-                            if f.name == selected_func:
-                                st.code(f.disassembly_preview or "(No disassembly available)", language="nasm")
-                    else:
-                        st.write("No functions extracted.")
-                with tab2:
-                    if inspection:
-                        st.dataframe({"Strings": inspection.extracted_strings}, use_container_width=True)
-                with tab3:
-                    probe = final_state.get("probe_report")
-                    if probe:
-                        st.text(probe.help_text or "No CLI help output captured")
-
-            with col_right:
-                st.subheader("✨ Synthesized Modern Repository")
-                if candidate and candidate.files:
-                    file_options = [f.path for f in candidate.files]
-                    chosen_file_path = st.selectbox("View Source File", options=file_options)
-                    for f in candidate.files:
-                        if f.path == chosen_file_path:
-                            lang = "python" if chosen_file_path.endswith(".py") else "go"
-                            st.code(f.content, language=lang)
-
-                    # Zip Download
-                    zip_data = create_project_zip(candidate.files)
-                    st.download_button(
-                        label="⬇️ Download Modernized Project (.zip)",
-                        data=zip_data,
-                        file_name="kuro_modernized_project.zip",
-                        mime="application/zip",
-                        type="primary",
-                        use_container_width=True,
-                    )
-                else:
-                    st.warning("No candidate code generated.")
-
-            # Defect inspection if any
-            if ver_report and ver_report.defects:
-                st.divider()
-                st.subheader("⚠️ Parity Defect Log")
-                for d in ver_report.defects:
-                    with st.expander(f"Defect on args: {d.command_args}"):
-                        st.write(f"**Diagnostic**: {d.diagnostic_hint}")
-                        st.write(f"**Expected stdout**: `{d.expected_stdout}`")
-                        st.write(f"**Actual stdout**: `{d.actual_stdout}`")
+    # Defect inspection if any
+    if ver_report and ver_report.defects:
+        st.divider()
+        st.subheader("⚠️ Parity Defect Log")
+        for d in ver_report.defects:
+            with st.expander(f"Defect on args: {d.command_args}"):
+                st.write(f"**Diagnostic**: {d.diagnostic_hint}")
+                st.write(f"**Expected stdout**: `{d.expected_stdout}`")
+                st.write(f"**Actual stdout**: `{d.actual_stdout}`")
